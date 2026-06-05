@@ -3,13 +3,12 @@ import sqlite3
 import base64
 from openai import OpenAI
 from groq import Groq
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # BAZA
@@ -31,6 +30,14 @@ def baza_yarat():
             ovqat_nomi TEXT,
             kaloriya INTEGER,
             sana TEXT DEFAULT (date('now'))
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS suv (
+            user_id INTEGER,
+            miqdor INTEGER DEFAULT 0,
+            sana TEXT DEFAULT (date('now')),
+            PRIMARY KEY (user_id, sana)
         )
     """)
     conn.commit()
@@ -77,6 +84,35 @@ def bugungi_ovqatlar(user_id):
     conn.close()
     return natija
 
+def suv_olish(user_id):
+    conn = sqlite3.connect("kaloriya.db")
+    cur = conn.cursor()
+    cur.execute("SELECT miqdor FROM suv WHERE user_id = ? AND sana = date('now')", (user_id,))
+    natija = cur.fetchone()
+    conn.close()
+    return natija[0] if natija else 0
+
+def suv_qosh(user_id, miqdor):
+    conn = sqlite3.connect("kaloriya.db")
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO suv (user_id, miqdor, sana)
+        VALUES (?, ?, date('now'))
+        ON CONFLICT(user_id, sana) DO UPDATE SET miqdor = miqdor + ?
+    """, (user_id, miqdor, miqdor))
+    conn.commit()
+    conn.close()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ASOSIY MENYU
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def asosiy_menyu():
+    return ReplyKeyboardMarkup([
+        ["📊 Bugungi statistika", "🎯 Maqsad belgilash"],
+        ["💧 Suv miqdori", "📅 Haftalik hisobot"],
+        ["⚙️ Sozlamalar", "❓ Yordam"]
+    ], resize_keyboard=True)
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # BUYRUQLAR
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -88,10 +124,9 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Salom, {ism}! 👋\n\n"
         "Men kaloriya yordamchisiman 🥗\n\n"
         "✍️ Ovqat yozing: '100g guruch'\n"
-        "📸 Ovqat rasmi yuboring\n"
-        "🎯 Maqsad: /maqsad 2000\n"
-        "📊 Bugun: /bugun\n"
-        "/help — barcha buyruqlar"
+        "📸 Ovqat rasmi yuboring\n\n"
+        "Quyidagi tugmalardan foydalaning 👇",
+        reply_markup=asosiy_menyu()
     )
 
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -100,10 +135,12 @@ async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/start — boshlash\n"
         "/help — yordam\n"
         "/maqsad [son] — kunlik kaloriya maqsadi\n"
-        "  Misol: /maqsad 1800\n"
-        "/bugun — bugungi kaloriyalar\n\n"
+        "/bugun — bugungi kaloriyalar\n"
+        "/suv — suv miqdori\n"
+        "/hafta — haftalik hisobot\n\n"
         "✍️ Matn: '100g osh' yoki '1 ta tuxum'\n"
-        "📸 Rasm: ovqat rasmini yuboring"
+        "📸 Rasm: ovqat rasmini yuboring",
+        reply_markup=asosiy_menyu()
     )
 
 async def maqsad_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -114,12 +151,30 @@ async def maqsad_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         maqsad = int(ctx.args[0])
         if 500 <= maqsad <= 5000:
             maqsad_saqlash(user_id, maqsad)
-            await update.message.reply_text(f"✅ Kunlik maqsad: {maqsad} kcal\n\nSog'lom ovqatlanish uchun omad! 💪")
+            await update.message.reply_text(
+                f"✅ Kunlik maqsad: {maqsad} kcal\n\nSog'lom ovqatlanish uchun omad! 💪",
+                reply_markup=asosiy_menyu()
+            )
         else:
             await update.message.reply_text("⚠️ Maqsad 500 dan 5000 gacha bo'lishi kerak.\nMisol: /maqsad 2000")
     else:
         hozirgi = maqsad_olish(user_id)
-        await update.message.reply_text(f"🎯 Hozirgi kunlik maqsad: {hozirgi} kcal\n\nO'zgartirish uchun:\n/maqsad 1800")
+        tugmalar = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("1500 kcal", callback_data="maqsad_1500"),
+                InlineKeyboardButton("1800 kcal", callback_data="maqsad_1800"),
+            ],
+            [
+                InlineKeyboardButton("2000 kcal", callback_data="maqsad_2000"),
+                InlineKeyboardButton("2500 kcal", callback_data="maqsad_2500"),
+            ],
+            [InlineKeyboardButton("3000 kcal", callback_data="maqsad_3000")]
+        ])
+        await update.message.reply_text(
+            f"🎯 Hozirgi kunlik maqsad: {hozirgi} kcal\n\n"
+            "Yangi maqsad tanlang yoki /maqsad 2000 deb yozing:",
+            reply_markup=tugmalar
+        )
 
 async def bugun_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -127,24 +182,143 @@ async def bugun_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     foydalanuvchi_saqlash(user_id, ism)
     ovqatlar = bugungi_ovqatlar(user_id)
     maqsad = maqsad_olish(user_id)
+    suv = suv_olish(user_id)
+
     if not ovqatlar:
-        await update.message.reply_text("📭 Bugun hali hech narsa yemagansiz.\n\nOvqat nomini yozing yoki rasm yuboring! 🥗")
+        await update.message.reply_text(
+            "📭 Bugun hali hech narsa yemagansiz.\n\nOvqat nomini yozing yoki rasm yuboring! 🥗",
+            reply_markup=asosiy_menyu()
+        )
         return
+
     jami = sum(k for _, k in ovqatlar)
     qolgan = maqsad - jami
-    matn = "📊 Bugungi ovqatlar:\n━━━━━━━━━━━━━━\n"
+    foiz = min(int((jami / maqsad) * 10), 10)
+    bar = "🟩" * foiz + "⬜" * (10 - foiz)
+
+    matn = "📊 Bugungi holat:\n━━━━━━━━━━━━━━\n"
     for i, (nom, kal) in enumerate(ovqatlar, 1):
         matn += f"{i}. {nom} — {kal} kcal\n"
     matn += f"━━━━━━━━━━━━━━\n"
     matn += f"🔥 Jami: {jami} kcal\n"
     matn += f"🎯 Maqsad: {maqsad} kcal\n"
     if qolgan > 0:
-        foiz = int((jami / maqsad) * 10)
-        bar = "🟩" * foiz + "⬜" * (10 - foiz)
-        matn += f"✅ Qolgan: {qolgan} kcal\n{bar} {int((jami/maqsad)*100)}%"
+        matn += f"✅ Qolgan: {qolgan} kcal\n"
     else:
-        matn += f"⚠️ Maqsaddan {abs(qolgan)} kcal oshdi!"
-    await update.message.reply_text(matn)
+        matn += f"⚠️ Maqsaddan {abs(qolgan)} kcal oshdi!\n"
+    matn += f"{bar} {int((jami/maqsad)*100)}%\n"
+    matn += f"━━━━━━━━━━━━━━\n"
+
+    suv_foiz = min(int((suv / 2000) * 10), 10)
+    suv_bar = "💧" * suv_foiz + "⬜" * (10 - suv_foiz)
+    matn += f"💧 Suv: {suv} ml / 2000 ml\n{suv_bar}"
+
+    await update.message.reply_text(matn, reply_markup=asosiy_menyu())
+
+async def suv_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ism = update.effective_user.first_name
+    foydalanuvchi_saqlash(user_id, ism)
+    suv = suv_olish(user_id)
+    foiz = min(int((suv / 2000) * 10), 10)
+    bar = "💧" * foiz + "⬜" * (10 - foiz)
+    tugmalar = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💧 200 ml", callback_data="suv_200"),
+            InlineKeyboardButton("💧 300 ml", callback_data="suv_300"),
+            InlineKeyboardButton("💧 500 ml", callback_data="suv_500"),
+        ],
+        [InlineKeyboardButton("💧 1 litr", callback_data="suv_1000")]
+    ])
+    await update.message.reply_text(
+        f"💧 Bugungi suv: {suv} ml / 2000 ml\n"
+        f"{bar} {int((suv/2000)*100)}%\n\n"
+        "Qancha suv ichdingiz?",
+        reply_markup=tugmalar
+    )
+
+async def hafta_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    conn = sqlite3.connect("kaloriya.db")
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT sana, SUM(kaloriya) FROM ovqatlar
+        WHERE user_id = ? AND sana >= date('now', '-7 days')
+        GROUP BY sana ORDER BY sana ASC
+    """, (user_id,))
+    natija = cur.fetchall()
+    conn.close()
+
+    if not natija:
+        await update.message.reply_text(
+            "📅 Oxirgi 7 kunda ma'lumot yo'q.\n\nOvqat yozing — statistika to'plana boshlaydi!",
+            reply_markup=asosiy_menyu()
+        )
+        return
+
+    maqsad = maqsad_olish(user_id)
+    matn = "📅 Haftalik hisobot:\n━━━━━━━━━━━━━━\n"
+    jami = 0
+    for sana, kaloriya in natija:
+        foiz = min(int((kaloriya / maqsad) * 10), 10)
+        bar = "🟩" * foiz + "⬜" * (10 - foiz)
+        matn += f"{sana}:\n{bar} {kaloriya} kcal\n"
+        jami += kaloriya
+
+    ortacha = jami // len(natija)
+    matn += f"━━━━━━━━━━━━━━\n📊 O'rtacha: {ortacha} kcal/kun"
+    await update.message.reply_text(matn, reply_markup=asosiy_menyu())
+
+async def sozlamalar_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    maqsad = maqsad_olish(update.effective_user.id)
+    tugmalar = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🎯 Kaloriya maqsadi: {maqsad} kcal", callback_data="sozlama_kaloriya")],
+        [InlineKeyboardButton("💧 Suv maqsadi: 2000 ml", callback_data="sozlama_suv")],
+    ])
+    await update.message.reply_text("⚙️ Sozlamalar:", reply_markup=tugmalar)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CALLBACK HANDLER
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    # Suv
+    if query.data.startswith("suv_"):
+        miqdor = int(query.data.split("_")[1])
+        suv_qosh(user_id, miqdor)
+        suv = suv_olish(user_id)
+        foiz = min(int((suv / 2000) * 10), 10)
+        bar = "💧" * foiz + "⬜" * (10 - foiz)
+        tugmalar = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("💧 200 ml", callback_data="suv_200"),
+                InlineKeyboardButton("💧 300 ml", callback_data="suv_300"),
+                InlineKeyboardButton("💧 500 ml", callback_data="suv_500"),
+            ],
+            [InlineKeyboardButton("💧 1 litr", callback_data="suv_1000")]
+        ])
+        await query.edit_message_text(
+            f"✅ {miqdor} ml qo'shildi!\n\n"
+            f"💧 Bugungi suv: {suv} ml / 2000 ml\n"
+            f"{bar} {int((suv/2000)*100)}%\n\n"
+            "Yana qo'shish:",
+            reply_markup=tugmalar
+        )
+
+    # Maqsad
+    elif query.data.startswith("maqsad_"):
+        maqsad = int(query.data.split("_")[1])
+        maqsad_saqlash(user_id, maqsad)
+        await query.edit_message_text(f"✅ Kunlik maqsad: {maqsad} kcal ga o'zgartirildi! 💪")
+
+    elif query.data == "sozlama_kaloriya":
+        await query.edit_message_text("🎯 Yangi maqsad yozing:\nMisol: /maqsad 2000")
+
+    elif query.data == "sozlama_suv":
+        await query.edit_message_text("💧 Suv maqsadi hozircha 2000 ml ga o'rnatilgan.")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # MATN HANDLER
@@ -154,6 +328,27 @@ async def matn_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ism = update.effective_user.first_name
     foydalanuvchi_saqlash(user_id, ism)
     foydalanuvchi_matni = update.message.text
+
+    # Tugma bosilganda
+    if foydalanuvchi_matni == "📊 Bugungi statistika":
+        await bugun_cmd(update, ctx)
+        return
+    if foydalanuvchi_matni == "🎯 Maqsad belgilash":
+        await maqsad_cmd(update, ctx)
+        return
+    if foydalanuvchi_matni == "💧 Suv miqdori":
+        await suv_cmd(update, ctx)
+        return
+    if foydalanuvchi_matni == "📅 Haftalik hisobot":
+        await hafta_cmd(update, ctx)
+        return
+    if foydalanuvchi_matni == "⚙️ Sozlamalar":
+        await sozlamalar_cmd(update, ctx)
+        return
+    if foydalanuvchi_matni == "❓ Yordam":
+        await help_cmd(update, ctx)
+        return
+
     kutish = await update.message.reply_text("⏳ Hisoblanmoqda...")
 
     prompt = f"""Sen kaloriya va ozuqa mutaxassisisan. O'zbek tilida javob ber.
@@ -191,17 +386,10 @@ Ovqat emas bo'lsa — oddiy o'zbek tilida javob ber."""
         except:
             pass
         await kutish.delete()
-        await update.message.reply_text(javob)
+        await update.message.reply_text(javob, reply_markup=asosiy_menyu())
     except Exception as e:
         await kutish.delete()
-        if "insufficient_quota" in str(e) or "429" in str(e):
-            await update.message.reply_text(
-                "😔 Hozirda rasm orqali tahlil qilish vaqtincha mavjud emas.\n\n"
-                "✍️ Ovqat nomini yozib yuboring:\n"
-                "Misol: '1 piyola osh' yoki '100g tovuq'"
-            )
-        else:
-            await update.message.reply_text("❌ Xatolik yuz berdi. Qayta urinib ko'ring.")
+        await update.message.reply_text("❌ Xatolik yuz berdi. Qayta urinib ko'ring.")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # RASM HANDLER
@@ -219,7 +407,6 @@ async def rasm_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         rasm_base64 = base64.b64encode(rasm_bytes).decode("utf-8")
 
         prompt = """Sen kaloriya mutaxassisisan. O'zbek tilida javob ber.
-
 Rasmda ko'ringan ovqatni tahlil qil:
 
 [EMOJI] [Ovqat nomi]
@@ -256,10 +443,18 @@ Ovqat ko'rinmasa — "Rasmda ovqat ko'rinmayapti 🤔" de."""
         except:
             pass
         await kutish.delete()
-        await update.message.reply_text(javob)
+        await update.message.reply_text(javob, reply_markup=asosiy_menyu())
     except Exception as e:
         await kutish.delete()
-        await update.message.reply_text(f"❌ Xatolik: {e}")
+        if "insufficient_quota" in str(e) or "429" in str(e):
+            await update.message.reply_text(
+                "😔 Hozirda rasm orqali tahlil qilish vaqtincha mavjud emas.\n\n"
+                "✍️ Ovqat nomini yozib yuboring:\n"
+                "Misol: '1 piyola osh' yoki '100g tovuq'",
+                reply_markup=asosiy_menyu()
+            )
+        else:
+            await update.message.reply_text("❌ Xatolik yuz berdi. Qayta urinib ko'ring.")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ISHGA TUSHIRISH
@@ -271,6 +466,10 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("maqsad", maqsad_cmd))
     app.add_handler(CommandHandler("bugun", bugun_cmd))
+    app.add_handler(CommandHandler("suv", suv_cmd))
+    app.add_handler(CommandHandler("hafta", hafta_cmd))
+    app.add_handler(CommandHandler("sozlamalar", sozlamalar_cmd))
+    app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.PHOTO, rasm_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, matn_handler))
     print("Bot ishlamoqda... ✅")
