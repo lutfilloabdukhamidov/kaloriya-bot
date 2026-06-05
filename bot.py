@@ -199,7 +199,7 @@ async def bugun_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     matn = "📊 Bugungi holat:\n━━━━━━━━━━━━━━\n"
     for i, (nom, kal) in enumerate(ovqatlar, 1):
         matn += f"{i}. {nom} — {kal} kcal\n"
-    matn += f"━━━━━━━━━━━━━━\n"
+    matn += "━━━━━━━━━━━━━━\n"
     matn += f"🔥 Jami: {jami} kcal\n"
     matn += f"🎯 Maqsad: {maqsad} kcal\n"
     if qolgan > 0:
@@ -207,8 +207,7 @@ async def bugun_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     else:
         matn += f"⚠️ Maqsaddan {abs(qolgan)} kcal oshdi!\n"
     matn += f"{bar} {int((jami/maqsad)*100)}%\n"
-    matn += f"━━━━━━━━━━━━━━\n"
-
+    matn += "━━━━━━━━━━━━━━\n"
     suv_foiz = min(int((suv / 2000) * 10), 10)
     suv_bar = "💧" * suv_foiz + "⬜" * (10 - suv_foiz)
     matn += f"💧 Suv: {suv} ml / 2000 ml\n{suv_bar}"
@@ -314,6 +313,34 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         maqsad_saqlash(user_id, maqsad)
         await query.edit_message_text(f"✅ Kunlik maqsad: {maqsad} kcal ga o'zgartirildi! 💪")
 
+    # Ovqat qo'shish
+    elif query.data.startswith("qosh_"):
+        qismlar = query.data.split("_", 2)
+        kaloriya = int(qismlar[1])
+        ovqat_nomi = qismlar[2] if len(qismlar) > 2 else "Noma'lum"
+        ovqat_saqlash(user_id, ovqat_nomi, kaloriya)
+
+        maqsad = maqsad_olish(user_id)
+        ovqatlar = bugungi_ovqatlar(user_id)
+        jami = sum(k for _, k in ovqatlar)
+        qolgan = maqsad - jami
+        foiz = min(int((jami / maqsad) * 10), 10)
+        bar = "🟩" * foiz + "⬜" * (10 - foiz)
+
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            f"✅ Ro'yxatga qo'shildi!\n\n"
+            f"🔥 Bugungi jami: {jami} kcal\n"
+            f"🎯 Maqsad: {maqsad} kcal\n"
+            f"{'✅ Qolgan: ' + str(qolgan) + ' kcal' if qolgan > 0 else '⚠️ Maqsaddan ' + str(abs(qolgan)) + ' kcal oshdi!'}\n"
+            f"{bar} {int((jami/maqsad)*100)}%",
+            reply_markup=asosiy_menyu()
+        )
+
+    elif query.data == "qoshma":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("❌ Qo'shilmadi.", reply_markup=asosiy_menyu())
+
     elif query.data == "sozlama_kaloriya":
         await query.edit_message_text("🎯 Yangi maqsad yozing:\nMisol: /maqsad 2000")
 
@@ -376,17 +403,34 @@ Ovqat emas bo'lsa — oddiy o'zbek tilida javob ber."""
             messages=[{"role": "user", "content": prompt}]
         )
         javob = response.choices[0].message.content
+
+        # Kaloriyani ajratib olamiz
+        kaloriya = 0
         try:
             for qator in javob.split("\n"):
                 if "Kaloriya:" in qator:
                     sonlar = [s for s in qator.split() if s.isdigit()]
                     if sonlar:
-                        ovqat_saqlash(user_id, foydalanuvchi_matni[:50], int(sonlar[0]))
+                        kaloriya = int(sonlar[0])
                         break
         except:
             pass
+
         await kutish.delete()
-        await update.message.reply_text(javob, reply_markup=asosiy_menyu())
+
+        # Kaloriya topilsa — tasdiqlash tugmasi
+        if kaloriya > 0:
+            tugmalar = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    f"✅ Ro'yxatga qo'shish ({kaloriya} kcal)",
+                    callback_data=f"qosh_{kaloriya}_{foydalanuvchi_matni[:40]}"
+                )],
+                [InlineKeyboardButton("❌ Qo'shmaslik", callback_data="qoshma")]
+            ])
+            await update.message.reply_text(javob, reply_markup=tugmalar)
+        else:
+            await update.message.reply_text(javob, reply_markup=asosiy_menyu())
+
     except Exception as e:
         await kutish.delete()
         await update.message.reply_text("❌ Xatolik yuz berdi. Qayta urinib ko'ring.")
@@ -433,17 +477,34 @@ Ovqat ko'rinmasa — "Rasmda ovqat ko'rinmayapti 🤔" de."""
             max_tokens=500
         )
         javob = response.choices[0].message.content
+
+        # Kaloriyani ajratib olamiz
+        kaloriya = 0
         try:
             for qator in javob.split("\n"):
                 if "Kaloriya:" in qator:
                     sonlar = [s for s in qator.split() if s.isdigit()]
                     if sonlar:
-                        ovqat_saqlash(user_id, "📸 Rasm orqali", int(sonlar[0]))
+                        kaloriya = int(sonlar[0])
                         break
         except:
             pass
+
         await kutish.delete()
-        await update.message.reply_text(javob, reply_markup=asosiy_menyu())
+
+        # Kaloriya topilsa — tasdiqlash tugmasi
+        if kaloriya > 0:
+            tugmalar = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    f"✅ Ro'yxatga qo'shish ({kaloriya} kcal)",
+                    callback_data=f"qosh_{kaloriya}_📸 Rasm orqali"
+                )],
+                [InlineKeyboardButton("❌ Qo'shmaslik", callback_data="qoshma")]
+            ])
+            await update.message.reply_text(javob, reply_markup=tugmalar)
+        else:
+            await update.message.reply_text(javob, reply_markup=asosiy_menyu())
+
     except Exception as e:
         await kutish.delete()
         if "insufficient_quota" in str(e) or "429" in str(e):
