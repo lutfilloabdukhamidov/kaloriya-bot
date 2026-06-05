@@ -251,7 +251,9 @@ async def matn_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ism = update.effective_user.first_name
     foydalanuvchi_saqlash(user_id, ism)
     foydalanuvchi_matni = update.message.text
-    await update.message.reply_text("⏳ Hisoblanmoqda...")
+
+    # Kutish xabari
+    kutish = await update.message.reply_text("⏳ Hisoblanmoqda...")
 
     prompt = f"""
 Sen kaloriya va ozuqa mutaxassisisan. Foydalanuvchi sening bilan o'zbek tilida gaplashadi.
@@ -260,7 +262,7 @@ Foydalanuvchi yozdi: "{foydalanuvchi_matni}"
 
 Agar bu ovqat yoki mahsulot haqida bo'lsa, quyidagi formatda javob ber:
 
-🍽 [Ovqat nomi]
+[EMOJI] [Ovqat nomi]
 ━━━━━━━━━━━━━━
 🔥 Kaloriya: [faqat son] kcal
 💪 Protein: [son] g
@@ -268,6 +270,19 @@ Agar bu ovqat yoki mahsulot haqida bo'lsa, quyidagi formatda javob ber:
 🍞 Uglevod: [son] g
 ━━━━━━━━━━━━━━
 💡 [1-2 qisqa maslahat]
+
+[EMOJI] tanlash qoidasi:
+- Ichimliklar (suv, choy, qahva, sharbat, kola, juice): 🥤
+- Mevalar: 🍎
+- Sabzavotlar: 🥦
+- Go'sht taomlar: 🍖
+- Guruch, non, pasta taomlar: 🍚
+- Sho'rva, osh, lagmon: 🍜
+- Shirinliklar, tort, pechenye: 🍰
+- Tuxum taomlar: 🍳
+- Sut mahsulotlari: 🥛
+- Fast food: 🍔
+- Boshqa ovqatlar: 🍽
 
 MUHIM: Kaloriya qatorida faqat bitta son bo'lsin. Masalan: "Kaloriya: 350 kcal"
 
@@ -281,21 +296,24 @@ Agar ovqat bilan bog'liq bo'lmasa — oddiy o'zbek tilida javob ber.
         )
         javob = response.choices[0].message.content
 
-        # Kaloriyani ajratib bazaga saqlaymiz
+        # Kaloriyani bazaga saqlaymiz
         try:
             for qator in javob.split("\n"):
                 if "Kaloriya:" in qator:
                     sonlar = [s for s in qator.split() if s.isdigit()]
                     if sonlar:
                         kaloriya = int(sonlar[0])
-                        ovqat_nomi = foydalanuvchi_matni[:50]
-                        ovqat_saqlash(user_id, ovqat_nomi, kaloriya)
+                        ovqat_saqlash(user_id, foydalanuvchi_matni[:50], kaloriya)
                         break
         except:
             pass
 
+        # Kutish xabarini o'chirib, javob yuboramiz
+        await kutish.delete()
         await update.message.reply_text(javob)
+
     except Exception as e:
+        await kutish.delete()
         await update.message.reply_text(f"❌ Xatolik: {e}")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
