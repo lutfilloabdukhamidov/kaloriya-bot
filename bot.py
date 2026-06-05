@@ -6,14 +6,16 @@ from google import genai as google_genai
 from google.genai import types
 import httpx
 
-load_dotenv()
+load_dotenv(override=False)
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+GROQ_KEY = os.getenv("GROQ_API_KEY")
+print(f"GROQ_KEY: {GROQ_KEY[:10] if GROQ_KEY else 'TOPILMADI'}")
+client = Groq(api_key=GROQ_KEY)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # BAZA — yaratish va ulash
