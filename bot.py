@@ -194,7 +194,14 @@ Ovqat emas bo'lsa — oddiy o'zbek tilida javob ber."""
         await update.message.reply_text(javob)
     except Exception as e:
         await kutish.delete()
-        await update.message.reply_text(f"❌ Xatolik: {e}")
+        if "insufficient_quota" in str(e) or "429" in str(e):
+            await update.message.reply_text(
+                "😔 Hozirda rasm orqali tahlil qilish vaqtincha mavjud emas.\n\n"
+                "✍️ Ovqat nomini yozib yuboring:\n"
+                "Misol: '1 piyola osh' yoki '100g tovuq'"
+            )
+        else:
+            await update.message.reply_text("❌ Xatolik yuz berdi. Qayta urinib ko'ring.")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # RASM HANDLER
