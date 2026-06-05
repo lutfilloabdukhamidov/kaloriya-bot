@@ -1,13 +1,7 @@
 import os
 import sqlite3
-from dotenv import load_dotenv
 
-from google import genai as google_genai
-from google.genai import types
-import httpx
-
-load_dotenv(override=False)
-
+# load_dotenv ni olib tashlaymiz — Railway o'zi o'qiydi
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
