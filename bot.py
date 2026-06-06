@@ -120,14 +120,30 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     ism = update.effective_user.first_name
     foydalanuvchi_saqlash(user_id, ism)
-    await update.message.reply_text(
-        f"Salom, {ism}! 👋\n\n"
-        "Men kaloriya yordamchisiman 🥗\n\n"
-        "✍️ Ovqat yozing: '100g guruch'\n"
-        "📸 Ovqat rasmi yuboring\n\n"
-        "Quyidagi tugmalardan foydalaning 👇",
-        reply_markup=asosiy_menyu()
-    )
+
+    # Rasm yuborish
+    try:
+        with open("welcome.png", "rb") as rasm:
+            await update.message.reply_photo(
+                photo=rasm,
+                caption=(
+                    f"Salom, {ism}! 👋\n\n"
+                    "Men kaloriya yordamchisiman 🥗\n\n"
+                    "✍️ Ovqat yozing: '100g guruch'\n"
+                    "📸 Ovqat rasmi yuboring\n\n"
+                    "Quyidagi tugmalardan foydalaning 👇"
+                ),
+                reply_markup=asosiy_menyu()
+            )
+    except:
+        await update.message.reply_text(
+            f"Salom, {ism}! 👋\n\n"
+            "Men kaloriya yordamchisiman 🥗\n\n"
+            "✍️ Ovqat yozing: '100g guruch'\n"
+            "📸 Ovqat rasmi yuboring\n\n"
+            "Quyidagi tugmalardan foydalaning 👇",
+            reply_markup=asosiy_menyu()
+        )
 
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
